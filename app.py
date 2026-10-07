@@ -20,7 +20,6 @@ st.subheader("Matrix Metadata Options")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    # Application Selector: MVA or MVO
     application_type = st.selectbox(
         "Application",
         options=["MVA", "MVO"],
@@ -29,7 +28,6 @@ with col1:
     )
 
 with col2:
-    # Label is 'Test Case Owner Name' -> Populates the 'Assigned To' column in output
     tc_owner_name = st.text_input("Test Case Owner Name", value="Sawan")
 
 with col3:
@@ -40,12 +38,35 @@ if uploaded_files:
         all_dfs = []
         
         for file in uploaded_files:
+            file_bytes = file.read()
+            df = None
+            
+            # 1. Try standard pandas read_excel (.xlsx / real .xls)
             try:
-                # Read uploaded excel sheet
-                df = pd.read_excel(file)
+                df = pd.read_excel(io.BytesIO(file_bytes))
+            except Exception:
+                pass
+
+            # 2. Try xlrd engine explicitly for legacy binary .xls
+            if df is None:
+                try:
+                    df = pd.read_excel(io.BytesIO(file_bytes), engine="xlrd")
+                except Exception:
+                    pass
+
+            # 3. Fallback for Jira's pseudo-HTML .xls exports
+            if df is None:
+                try:
+                    html_tables = pd.read_html(io.BytesIO(file_bytes))
+                    if html_tables:
+                        df = html_tables[0]
+                except Exception:
+                    pass
+
+            if df is not None:
                 all_dfs.append(df)
-            except Exception as e:
-                st.error(f"Error reading {file.name}: {e}")
+            else:
+                st.error(f"Could not read {file.name}. Please ensure it is a valid Excel or Jira file.")
 
         if all_dfs:
             combined_df = pd.concat(all_dfs, ignore_index=True)
